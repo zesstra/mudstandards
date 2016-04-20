@@ -312,6 +312,11 @@ packet with valid HMAC
 Combined with the default HMAC secret the second possibility enables peers to
 upgrade from the default secret to a specific one at any time.
 
+Which peers to inform about the secret, depends on the operator preferences.
+It may depend on a trust score the operator assigns or it may be sent to peers
+that are around for a certain time.
+
+
 Defined system headers / fields
 ===============================
 The fields defined in this section **MUST NOT** be used in any application sending
