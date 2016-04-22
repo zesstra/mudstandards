@@ -47,6 +47,146 @@ MUD name / peer name
 peer identifier
   a unique combination of MUD name, peer address and receiving peer port
 
+Host list / Peer data
+=====================
+A peer **MUST** store the following data about other known peers:
+
+* peer name (unique) (name)
+* public key (unique), if available (pkey)
+* peer address (ip)
+* receiving peer port (port)
+* time of last contact (tlc)
+* time of first contact (tfc)
+* reputation (trust) of that peer (reputation)
+
+A peer **SHOULD** store the following data about other known peers:
+
+* list of supported services (services)
+* last seen intermud version (lsiv)
+* expiration time (ncttl)
+* MTU of the peer (mtu)
+
+A peers public key would be the best unique identifier. However, in the
+intermud a peer needs a unique symbolic name to address it. So a peers name
+and its public key should both be used as unique and long-lived identifier.
+
+But a peer MAY change its name by either announcing it or by just using a new
+name. If the public key remains the same, the entry in the peer list should
+be updated accordingly.
+
+If a peer claims to have a name that already exists, but its public key does
+not match the known public key of the existing peer entry, the new peer **MUST
+NOT** be entered in the peer list. Instead, any packets from that peer
+**SHOULD** be discarded. An implementation MAY notify the operator about this.
+
+When a peer starts up, it **SHOULD** make itself known by pinging known peers
+or sending a HELO packet.
+
+Host keys
+---------
+Each host **MUST** have an elliptic curve private/public key pair for ECDSA or
+EdDSA signatures using one of the following curves:
+
+* secp256r1 / prime256v1
+* Curve25519
+* secp521r1
+
+This *identity key* is long-lived. Bascically, the intermud peer name and its
+reputation tie to this identity key.
+
+Reputation
+----------
+The reputation is a score that symbolizes how trustworthy a peer is. It may be
+used for a number of decisions. By default, the reputation score is used for
+the following:
+
+* scaling factor when exchanging peer information (see below)
+* peer expiration time since last contact (ncttl)
+* services that are offered to the other peer
+
+Specififally, to prevent spam and misuse, services like public channel
+messages and intermud mail **SHOULD** be restricted to peers with a reputation
+> 0. A peer may also restrict the accessibility of user depending on the
+reputation of the sending peer (e.g. beginners can't be disturbed from freshly
+known intermud peers).
+
+By default, a new peer starts with a score of 0 (which basically means, the
+information it offers, is not trusted). After a peer has been known for some
+time, its score gets increased:
+
+==========  ==============
+time known  score increase
+==========  ==============
+7 days      +1
+3 months    +1
+1 year      +1
+==========  ==============
+
+A reputation of more than 3 can only be assigned by an operator.
+
+A negative reputation is possible (e.g. manually assigned by operators) and
+should be used to restrict services. Peers with negativ reputation should also
+be kept longer in the peer list.
+
+Peer expiration
+---------------
+A peer should expire peers from its host list some time after the last contact. The
+expiration time may be chosen by the operator.
+
+However, to prevent rogue peers impersonating other peers, peers **MUST NOT**
+be expired before 48h or a time this peer announced earlier (see module...
+TODO) passed without contact.
+
+==========  ===============
+reputation  expiration time
+==========  ===============
+0           72h
+1           14 days
+2           3 months
+3           6 months
+4+          12 months
+==========  ===============
+
+If a peer announces it wants to be remembered for longer than 72h without
+contact, this wish MAY be respected and the decision MAY be based on its
+reputation. A peer **SHOULD NOT** request more then 12 months.
+
+An implementation **MAY** may move offline peers to a separate list for
+bookkeeping after some time and stop trying to contact it anymore. This keeps
+the active peer list short and efficient. However the 'long offline' peers
+should still be remembered to keep the binding of public key and name.
+
+If a peer has problems keeping track of peers, it **SHOULD** prefer to
+temporarily stop accepting new peers instead of expiring known ones.
+If a peer experiences too much intermud traffic (or other resource drains), it
+**MAY** favor peers with higher reputation.
+
+Automatic update of peer data
+-----------------------------
+When receiving a v2.5 packet with valid HMAC from an address and/or port that
+differs from the one in the peer list, the peer entry **SHOULD** be updated to
+the new address/port.
+
+If the address or port of a peer changes, this peer **SHOULD** send a ping to
+known peers to announce the new address or port.
+
+When receiving a legacy mode packet, the peer entry **MAY** be updated.
+However, this carries the risk of rogue peers successfully impersonating
+another peer for an extended time.
+
+An inetd **SHOULD** contact the known peers at least once per 24h to check if
+it is still online and reachable (ping or helo).
+
+Update of the public key
+------------------------
+There ist a way to perform an update of the public key without operator
+intervention. The new public key **MUST** be received in a v2.5 packet with
+valid signature.
+
+A peer may inform other peers about an update of its public key by
+sending a push notification - TODO fill in module - Such an
+update **SHOULD** be honored.
+
 
 Transport layer
 ===============
@@ -163,9 +303,10 @@ signature of the packet.
 The first byte of the MAC field specifies the method and curve used. In intermud
 v2.5 the following algorithms **MUST** be supported:
 
-*
-*
-*
+* ECDSA, SHA1, curves secp256r1 / prime256v1, Curve25519, secp521r1
+* ECDSA, SHA256, curves secp256r1 / prime256v1, Curve25519, secp521r1
+* EdDSA, SHA1, curve Curve25519 (Ed25519)
+* EdDSA, SHA256, curve Curve25519 (Ed25519)
 
 The recommended method is ...
 
@@ -251,116 +392,6 @@ If the answer of a request does not arrive within 60s, the request **SHOULD**
 be expired (timeout).
 
 
-Host list / Peer data
-=====================
-A peer **MUST** store the following data about other known peers:
-
-* peer name (unique)
-* public key (unique), if available
-* peer address
-* peer port (receiving)
-* time of last contact
-* time of first contact
-* reputation (trust) of that peer
-
-A peer **SHOULD** store the following data about other known peers:
-
-* list of supported services
-* last seen intermud version
-* expiration time
-* MTU of the peer
-
-A peers public key would be the best unique identifier. However, in the
-intermud a peer needs a unique symbolic name to address it. So a peers name
-and its public key should both be used as unique and long-lived identifier.
-
-But a peer MAY change its name by either announcing it or by just using a new
-name. If the public key remains the same, the entry in the peer list should
-be updated accordingly.
-
-If a peer claims to have a name that already exists, but its public key does
-not match the known public key of the existing peer entry, the new peer **MUST
-NOT** be entered in the peer list. Instead, any packets from that peer
-**SHOULD** be discarded. An implementation MAY notify the operator about this.
-
-Reputation
-----------
-The reputation is a score that symbolizes how trustworthy a peer is. It may be
-used for a number of decisions. By default, the reputation score is used as a
-scaling factor when exchanging peer information (see below) and it influences
-how quickly a peer is expired once it can't be reached.
-
-By default, a new peer starts with a score of 0 (which basically means, the
-information it offers, is not trusted). After a peer has been known for some
-time, its score gets increased:
-
-==========  ==============
-time known  score increase
-==========  ==============
-7 days      +1
-3 months    +1
-1 year      +1
-==========  ==============
-
-A reputation of more than 3 can only be assigned by an operator.
-
-Peer expiration
----------------
-A peer should expire peers from its host list some time after the last contact. The
-expiration time may be chosen by the operator.
-
-However, to prevent rogue peers impersonating other peers, peers **MUST NOT**
-be expired before 48h or a time this peer announced earlier (see module...
-TODO) passed without contact.
-
-==========  ===============
-reputation  expiration time
-==========  ===============
-0           48h
-1           7 days
-2           3 months
-3           6 months
-4+          12 months
-==========  ===============
-
-If a peer announces it wants to be remembered for longer than 48h without
-contact, this wish MAY be respected and the decision MAY be based on its
-reputation.
-
-An implementation **MAY** may move offline peers to a separate list for
-bookkeeping after some time and stop trying to contact it anymore. This keeps
-the active peer list short and efficient. However the 'long offline' peers
-should still be remembered to keep the binding of public key and name.
-
-Before expiring a peer, a ping **SHOULD** be sent to check for reachability.
-
-Automatic update of peer data
------------------------------
-When receiving a v2.5 packet with valid HMAC from an address and/or port that
-differs from the one in the peer list, the peer entry **SHOULD** be updated to
-the new address/port.
-
-If the address or port of a peer changes, this peer **SHOULD** send a ping to
-known peers to announce the new address or port.
-
-When receiving a legacy mode packet, the peer entry **MAY** be updated.
-However, this carries the risk of rogue peers successfully impersonating
-another peer for an extended time.
-
-An inetd **SHOULD** contact the known peers at least once per 24h to check if
-it is still online and reachable (ping or helo).
-
-Update of the public key
-------------------------
-There ist a way to perform an update of the public key without operator
-intervention. The new public key **MUST** be received in a v2.5 packet with
-valid signature.
-
-A peer may inform other peers about an update of its public key by
-  sending a push notification - TODO fill in module - Such an
-  update **SHOULD** be honored.
-
-
 Defined system headers / fields
 ===============================
 The fields defined in this section **MUST NOT** be used in any application sending
@@ -437,6 +468,10 @@ in the DATA field, eg. "Mud-Name is alive.\n"
 helo
 ^^^^
 Used to exchange information like the public key.
+To make UDP amplification attacks (e.g. sending a small packet with a faked
+source which causes a larger packet be sent to the victim) more difficult,
+sent HELO **MUST** be larger than xxx bytes by adding a field 'dummy'
+containing zeroes.
 
 query
 ^^^^^
