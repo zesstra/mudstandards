@@ -55,14 +55,14 @@ A peer **MUST** store the following data about other known peers:
 * public key (unique), if available (pkey)
 * peer address (ip)
 * receiving peer port (port)
-* time of last contact (tlc)
-* time of first contact (tfc)
+* time of last contact (last_contact)
+* time of first contact (first_contact)
 * reputation (trust) of that peer (reputation)
 
 A peer **SHOULD** store the following data about other known peers:
 
 * list of supported services (services)
-* last seen intermud version (lsiv)
+* last seen intermud version (im_version)
 * expiration time (ncttl)
 * MTU of the peer (mtu)
 
@@ -265,7 +265,7 @@ for the packet. The packet-number and total-packets information is
 used to determine when all buffered packets have been received. The
 rest-of-packet part is not parsed, but is stored while the receiver
 awaits the other parts of the packet. When/if all parts have been
-received they are concatenated (without the fragmentation header and M fields
+received they are concatenated (without the fragmentation header and S fields
 of the individual fragments) and decoded as a normal packet.
 
 When storing fragments of a packet, the receiver **MUST** use a unique packet
@@ -303,12 +303,9 @@ signature of the packet.
 The first byte of the MAC field specifies the method and curve used. In intermud
 v2.5 the following algorithms **MUST** be supported:
 
-* ECDSA, SHA1, curves secp256r1 / prime256v1, Curve25519, secp521r1
-* ECDSA, SHA256, curves secp256r1 / prime256v1, Curve25519, secp521r1
-* EdDSA, SHA1, curve Curve25519 (Ed25519)
-* EdDSA, SHA256, curve Curve25519 (Ed25519)
+* (a) Ed25519 + SHA512
 
-The recommended method is ...
+The recommended method is Ed25519 + SHA512
 
 The transferred data is the complete packet string **without** the field S.
 After the packet (or fragment) is encoded (without the field S), the signature
