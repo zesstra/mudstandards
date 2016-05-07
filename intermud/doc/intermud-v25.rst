@@ -238,7 +238,7 @@ The fields S (packet signature), V (version) and F (flags) **MUST** be in this
 order at the start of the packet before any other fields. This 3 fields are
 also referred to as the 'packet header'. The general layout of packets is:
 
-   [fragmentation header]|packet header|packet payload/data
+   [fragmentation header|]packet header|packet payload/data
 
 The packet header **MUST NOT** be larger than 512 bytes.
 
