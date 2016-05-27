@@ -42,10 +42,13 @@ inetd
   a program encoding and sending and receiving and decoding intermud data
 peer address
   IP address of a peer (MUD)
-MUD name / peer name
-  a name (string) for a peer (MUD)
-peer identifier
-  a unique combination of MUD name, peer address and receiving peer port
+MUD name / peer name / peer identifier
+  a name (string) for a peer (MUD). If a peer has a key, the name is just a
+  symbolic name for a peer with this key. Otherwise, the peer name is the
+  unique identifier.
+  An inetd implementation MAY accept more than one peer with the same name as
+  long as their keys are different. However, it SHOULD keep a consistent
+  mapping between key and peer name.
 
 Host list / Peer data
 =====================
@@ -93,6 +96,21 @@ EdDSA signatures using one of the following curves:
 
 This *identity key* is long-lived. Bascically, the intermud peer name and its
 reputation tie to this identity key.
+
+When receiving an IM 2.5+ packet from a peer with unknown public key, the
+receiver requests the sender's public key with a HELO packet (see below) and
+stores it (trust on first use).
+
+
+Peer name
+---------
+If a peer has a key, the name is just a symbolic name for a peer with this
+key. Otherwise, the peer name is the unique identifier.
+
+An inetd implementation MAY accept more than one peer with the same name as
+long as their keys are different. However, it SHOULD keep a consistent mapping
+between key and peer name.
+
 
 Reputation
 ----------
@@ -220,7 +238,7 @@ All information is encoded and transferred as a string of bytes. The header
 names **SHOULD** consist of ASCII characters.
 Each packet sent consists of a string as follows:
 
-   S:xxx|V:nnn|F:nnn|header1:body1|headerN:bodyN|DATA:body-data
+   S:xxx|NAME:xxx|V:nnn|F:nnn|header1:body1|headerN:bodyN|DATA:body-data
 
 In other words, a header name, followed by a : and then the data
 associated with this header. Each field, consisting of a header/body pair, is
@@ -234,9 +252,10 @@ found, everything following it is interpreted as the body of the DATA
 field. This means it can contain special characters without error and
 it is used to carry the main body or data of all packets.
 
-The fields S (packet signature), V (version) and F (flags) **MUST** be in this
-order at the start of the packet before any other fields. This 3 fields are
-also referred to as the 'packet header'. The general layout of packets is:
+The fields S (packet signature), NAME (the sending peers name), V (version)
+and F (flags) **MUST** be in this order at the start of the packet before any
+other fields. These 4 fields are also referred to as the 'packet header'. The
+general layout of packets is:
 
    [fragmentation header|]packet header|packet payload/data
 
@@ -248,6 +267,7 @@ use lowercase names to avoid clashes.
 
 A header name **MUST** be unique in a packet.
 
+An implemention **MUST** support at least 32 fields per packet.
 
 Fragmented packets
 ------------------
@@ -261,7 +281,8 @@ These fragmentation headers are of the format:
   PKT:peername:packet-id:packet-number/total-packets|S:xxx|rest-of-packet
 
 In this case, the mudname and packet-id combine to form a unique id
-for the packet. The packet-number and total-packets information is
+for the packet. The packet id is the same number used for the header field ID
+(see below). The packet-number and total-packets information is
 used to determine when all buffered packets have been received. The
 rest-of-packet part is not parsed, but is stored while the receiver
 awaits the other parts of the packet. When/if all parts have been
@@ -269,8 +290,7 @@ received they are concatenated (without the fragmentation header and S fields
 of the individual fragments) and decoded as a normal packet.
 
 When storing fragments of a packet, the receiver **MUST** use a unique packet
-id which uses the peer name, peer address and sending peer port and the sent
-packet-id.
+id which uses the peer name and the sent packet-id.
 
 Any peer **MUST** support at least 100 fragments per packet.
 
@@ -395,11 +415,35 @@ The fields defined in this section **MUST NOT** be used in any application sendi
 data via intermud. The sending inetd **SHOULD** check for this during input
 validation before assembling a packet.
 
-RCPNT
-    (RECIPIENT) The body of this field should contiain the recipient the message
-    is to be sent to if applicable.
+V
+    Intermud version used by the sender (integer)
+F
+    Packet flags (integer, binary complement of flags)
+S
+    Signature of the packet
+NAME
+    The name of the sending mud.
+HST
+    The IP address of the host from which a request was received.
+    This is set by the receiving mud and is not contained in
+    outgoing packets.
+UDP
+    The UDP port the local mud is receiving on.
+    This is set by the receiving mud and is not contained in
+    outgoing packets.
+ID
+    The packet id. This field is simply an integer which is set by
+    the sending inetd. The number is incremented each time a packet
+    is sent (zero is never used). The ID **MAY** wrap-around to 1 after some
+    time.
+    This field is only needed if a reply is expected. REPLY packets **MUST**
+    include the original request id. This is not done by the inetd. However,
+    implementations **SHOULD** check for a sane ID field in outgoing replies.
+PKT
+    The fragmentation header for packets which have been fragmented (see
+    above).
 REQ
-    (REQUEST) The name of the intermud request that is being made of the
+    The name of the intermud request that is being made of the
     receiving mud. Standard requests that should be supported by
     all systems are "ping" (PING), "query" (QUERY), and "reply"
     (REPLY). The PING request is used to determine wether or not a
@@ -409,37 +453,18 @@ REQ
     is special in that it is the request name used for all replies
     made to by mud B to an initial request made by a mud A. It is
     mud A's responsibility to keep track of the original request
-    type so that the reply can be handled appropriately. 
+    type so that the reply can be handled appropriately.
 SND
-    (SENDER) The name of the person or object which sent the request or to
+    The name of the person or object which sent the request or to
     whom replies should be directed. This is essential if a reply
     is expected.
+RCPNT
+    The body of this field should contain the recipient the message
+    is to be sent to if applicable.
 DATA
     This field should contain the main body of any packet. It is
     the only field that can contain special delimiting characters
     without error.
-
-The following headers are used internally by the inetd and should
-not be used by external objects:
-
-HST
-    (HOST) The IP address of the host from which a request was received.
-    This is set by the receiving mud and is not contained in
-    outgoing packets.
-ID
-    The packet id. This field is simply an integer which is set by
-    the sending inetd. The number is incremented each time a packet
-    is sent (zero is never used). This field is only needed if a
-    reply is expected. REPLY packets _must_ include the original
-    request id. This is _not_ done by the inetd. 
-NAME
-    The name of the local mud. Used for security checking and to
-    update host list information. 
-PKT
-    (PACKET) A special header reserved for packets which have been fragmented.
-UDP
-    The UDP port the local mud is receiving on. Used for security
-    checking and updating host list information. 
 SYS
     (SYSTEM) Contains special system flags. The only system flag used at
     present is TIME_OUT. This is included in packets returned due
@@ -462,13 +487,35 @@ original requests ID in it's ID field and the SENDER in it's
 RECIPIENT field. It should also include an appropriate string
 in the DATA field, eg. "Mud-Name is alive.\n" 
 
+Request::
+
+  "...|REQUEST:ping|ID:42|DATA:Morgengrauen is alive.\n"
+
+Answer::
+
+  "...|REQUEST:reply|ID:42|DATA:Unitopa is alive.\n"
+
+
 helo
 ^^^^
-Used to exchange information like the public key.
-To make UDP amplification attacks (e.g. sending a small packet with a faked
-source which causes a larger packet be sent to the victim) more difficult,
-sent HELO **MUST** be larger than xxx bytes by adding a field 'dummy'
-containing zeroes.
+Used to exchange information like the public key. The sender sends its name
+and public key, the receiver answers with its own name and public key, encoded
+as JSON.
+
+Having to send one's own public key makes UDP amplification attacks (e.g.
+sending a small packet with a faked source which causes a larger packet be
+sent to the victim) more difficult, since there is no amplification.
+
+Optionally, more data **MAY** be included: desired mtu in bytes (mtu), ...
+
+Request::
+
+  "...|REQUEST:helo|ID:42|DATA:{ \"pkey\": \"xxx\", \"name\": \"Morgengrauen\" }"
+
+Answer::
+
+  "...|REQUEST:reply|ID:42|DATA:{ \"pkey\": \"yyy\", \"name\": \"Unitopia\" }"
+
 
 query
 ^^^^^
@@ -484,12 +531,4 @@ Optional requests / modules
 ----------------------------
 These modules are completely optional and their availability at the discretion
 of the operator of a peer.
-
-
-Exchange of secrets for the HMAC
-================================
-In this draft the secrets should be either exchanged manually between
-operators or sent with a push update to known peers.
-For the german MUDs participating in the Intermud, the mailing list
-mudadmins-de@groups.google.com is available.
 
