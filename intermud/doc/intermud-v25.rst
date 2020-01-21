@@ -314,6 +314,11 @@ On encoding integers are simply converted to a corresponding string.
 Strings **MUST** be prefixed with the character $. If the first character of a
 string is the $ character, it is escaped by prepending another $ character.
 
+Characters are encoded as UTF-8. However, system headers/fields are limited to
+the ASCII subset of UTF-8.
+A peer MAY limit itself to ASCII in the data fields when sending data.
+Nonetheless, it **MUST** be able to receive UTF-8 encoded characters.
+
 Packet signatures
 -----------------
 For packet validation and to prevent tampering on the wire and spoofing of
@@ -383,12 +388,18 @@ following conditions are met:
 * the receiving peer operates in strict mode
 
 After a packet conforming to protocol version >= 2.5 (>=2500) was received
-from a peer (this implies the succesful validation of the signature), legacy mode
-packets from that peer **MUST NOT** be accepted without manual intervention of
-an operator or expiration of the peer from the peer list.
+from a peer (this implies the successful validation of the signature), legacy
+mode packets from that peer **MUST NOT** be accepted without manual
+intervention of an operator or expiration of the peer from the peer list.
 
-If a peer sends to a peer with a known protocol version older than v2.5 it
-**MAY** send the data as a legacy mode packet. However, this is not recommended.
+If a peer sends to a peer *not* known to be a v2.5 (or higher) peer, it
+**MUST** use only characters from the ASCII subset of UTF-8 in the DATA
+field.
+
+If a peer sends to a peer with a known protocol version older than v2.5, it
+**MAY** send the data as a legacy mode packet. However, this is not
+recommended.
+
 
 Strict mode
 -----------
